@@ -4,6 +4,8 @@ from pathlib import Path
 
 from PIL import Image
 
+from utils.decorators import run_once
+
 IMAGE_FORMATS = ('.jpg', '.jpeg', '.png')
 
 
@@ -38,7 +40,7 @@ def scan_images(path, extension=IMAGE_FORMATS, recursive=False):
     return images
 
 
-def cache_images(path, recursive=False, verbose=False, **kwargs):
+def cache_images(path, transform, recursive=False, verbose=False, **kwargs):
     """
     Caches image files in a given directory or checks a single file.
 
@@ -64,8 +66,6 @@ def cache_images(path, recursive=False, verbose=False, **kwargs):
     for i, img in enumerate(images):
         if verbose:
             print(f'Caching image {i + 1}/{len(images)}: {img}')
-
-        transform = kwargs.get('transform', None)
 
         im = Image.open(img).convert('RGB')
         if transform:
@@ -105,44 +105,27 @@ class SubDir:
 
     def next(self, prefix, separator='_', start_suffix=1, step=1):
         """
-        Generates the next suffix for a given prefix, using the maximum existing suffix as a starting point.
+        Generate the next available name with a numeric suffix in a sequence.
 
-        This method validates the input parameters and then calculates the next available suffix for the given prefix.
-        It ensures that the suffix is numeric and increments it based on the provided step value. If no existing suffixes
-        are found that match the prefix, it starts with the provided `start_suffix`. The method continues to increment
-        the suffix until an available name is found that does not exist in the directory.
-
-        Args:
-            prefix (str): The prefix string.
-            separator (str, optional): The separator between the prefix and the suffix. Defaults to '_'.
-            start_suffix (int, optional): The starting suffix if no existing suffixes are found. Defaults to 1.
-            step (int, optional): The step value for the suffix increment. Defaults to 1.
+        Parameters:
+            prefix (str): The prefix of the name.
+            separator (str): The separator between the prefix and the numeric suffix.
+            start_suffix (int): The starting suffix value.
+            step (int): The increment step for the suffix.
 
         Returns:
-            str: The next available name with the given prefix and an incremented suffix.
+            str: The next available name with a numeric suffix.
 
         Raises:
-            ValueError: If `prefix` is not a non-empty string, `separator` is not a string, `start_suffix` is not an integer
-                        greater than or equal to 1, or `step` is not an integer greater than 0.
+            ValueError: If any of the parameters are of incorrect type or value.
 
         Examples:
             >>> sub_dir = SubDir('data')
-            >>> sub_dir.next('model', start_suffix=1)
+            >>> sub_dir.next('model')
             'data/model_1'
             >>> sub_dir.next('model', start_suffix=1)
             'data/model_2'
-            >>> sub_dir.next('model', start_suffix=1)
-            'data/model_3'
         """
-        if not isinstance(prefix, str) or not prefix:
-            raise ValueError("prefix must be a non-empty string")
-        if not isinstance(separator, str):
-            raise ValueError("separator must be a string")
-        if not isinstance(start_suffix, int) or start_suffix < 1:
-            raise ValueError("start_suffix must be an integer greater than or equal to 1")
-        if not isinstance(step, int) or step <= 0:
-            raise ValueError("step must be an integer greater than 0")
-
         max_suffix = self.find_id(prefix)
         if max_suffix is None:
             suffix = start_suffix
@@ -183,3 +166,27 @@ class SubDir:
         if max_suffix is None:
             return None
         return str(self.root / f'{prefix}_{max_suffix}')
+
+
+@run_once
+def makedirs(root: str, dirs: set[str] = (), exist_ok=True):
+    """
+    Create directories within a root directory.
+
+    This function creates directories within a specified root directory.
+    It can create multiple directories at once and can skip existing directories.
+
+    Args:
+        root (str): The root directory to create the subdirectories in.
+        dirs (set): A list of directory names to create.
+        exist_ok (bool, optional): Flag to skip existing directories. Defaults to True.
+
+    Returns:
+        None
+    """
+    if not dirs:
+        os.makedirs(root, exist_ok=exist_ok)
+        return
+
+    for d in dirs:
+        os.makedirs(os.path.join(root, d), exist_ok=exist_ok)
