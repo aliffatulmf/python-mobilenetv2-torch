@@ -79,6 +79,7 @@ def cache_images(path, transform, recursive=False, verbose=False, **kwargs):
 class SubDir:
     def __init__(self, root):
         self.root = Path(root)
+        self.root.mkdir(parents=True, exist_ok=True)
 
     def find_id(self, prefix, find_type='max', separator='_'):
         """
@@ -103,13 +104,14 @@ class SubDir:
             return None
         return max(ids) if find_type == 'max' else min(ids)
 
-    def next(self, prefix, separator='_', start_suffix=1, step=1):
+    def next(self, prefix, separator='_', makedir=False, start_suffix=1, step=1):
         """
         Generate the next available name with a numeric suffix in a sequence.
 
         Parameters:
             prefix (str): The prefix of the name.
             separator (str): The separator between the prefix and the numeric suffix.
+            makedir (bool): Flag to create the directory if it does not exist.
             start_suffix (int): The starting suffix value.
             step (int): The increment step for the suffix.
 
@@ -135,8 +137,11 @@ class SubDir:
 
         while True:
             name = f'{prefix}{separator}{suffix:0{padding}d}'
-            if not (self.root / name).exists():
-                return os.path.join(self.root, name)
+            subdir = Path(self.root / name)
+            if not subdir.exists():
+                if makedir:
+                    subdir.mkdir(parents=True)
+                return subdir.as_posix()
             suffix += step
             padding = len(str(suffix))
 
