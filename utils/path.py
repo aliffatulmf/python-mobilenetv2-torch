@@ -1,79 +1,48 @@
 import os
-import pickle
 from pathlib import Path
+from typing import List, Optional
 
-from PIL import Image
-
-from utils.decorators import run_once
-
-IMAGE_FORMATS = ('.jpg', '.jpeg', '.png')
+IMAGE_FORMATS = ['.jpg', '.jpeg', '.png']
 
 
-def scan_images(path, extension=IMAGE_FORMATS, recursive=False):
+def scan_objects(path: str, extension: List[str], recursive: bool = False) -> List[str]:
     """
-    Scans for image files in a given directory or checks a single file.
-
-    This function either scans a directory for image files (with extensions
-    specified in IMAGE_FORMATS) or checks if a given path is an image file.
-    It can perform a non-recursive (default) or recursive scan of directories.
+    Scans for objects in the specified path based on the provided extensions.
 
     Args:
-        path (str): The directory path or file path to scan for image files.
-        extension: (list, optional): A list of image file extensions to scan for. Defaults to IMAGE_FORMATS.
-        recursive (bool, optional): Flag to enable recursive directory scanning. Defaults to False.
+        path (str): The path where to scan for objects.
+        extension (List[str]): A list of file extensions to filter the scanned objects.
+        recursive (bool, optional): A boolean indicating whether to scan recursively. Defaults to False.
 
     Returns:
-        list: A list containing the paths to the image files found.
+        list: A list of paths to the scanned objects.
     """
-    images = []
-    # check if path is a directory and scan for image files
+    obj_list = []
     if os.path.isdir(path):
-        for root, _, files in os.walk(path):
-            for file in files:
-                if os.path.splitext(file)[-1].lower() in extension:
-                    images.append(os.path.join(root, file))
+        for dirpath, _, filenames in os.walk(path):
+            for filename in filenames:
+                if os.path.splitext(filename)[-1].lower() in extension:
+                    filepath = os.path.join(dirpath, filename)
+                    obj_list.append(filepath)
             if not recursive:
                 break
-    # check if the path itself is an image file
     elif os.path.isfile(path) and os.path.splitext(path)[-1].lower() in extension:
-        images.append(path)
-    return images
+        obj_list.append(path)
+    return obj_list
 
 
-def cache_images(path, transform, recursive=False, verbose=False, **kwargs):
+def scan_images(path: str, recursive: bool = False) -> List[str]:
     """
-    Caches image files in a given directory or checks a single file.
-
-    This function either caches image files (with extensions specified in
-    IMAGE_FORMATS) found in a directory or checks if a given path is an image file.
-    It can perform a non-recursive (default) or recursive scan of directories.
+    Scans images in the specified path based on the provided extensions.
 
     Args:
-        path (str): The directory path or file path to cache image files.
-        recursive (bool, optional): Flag to enable recursive directory scanning. Defaults to False.
+        path (str): The path where to scan for images.
+        recursive (bool, optional): A boolean indicating whether to scan recursively. Defaults to False.
 
     Returns:
-        None
+        list: A list of paths to the scanned images.
     """
-    images = scan_images(path, recursive)
-    if verbose:
-        if images:
-            print(f'Found {len(images)} images.')
-        else:
-            print('No images found.')
-            return
-
-    for i, img in enumerate(images):
-        if verbose:
-            print(f'Caching image {i + 1}/{len(images)}: {img}')
-
-        im = Image.open(img).convert('RGB')
-        if transform:
-            im = transform(im).unsqueeze(0)
-
-        filename = os.path.splitext(img)[0] + '.pkl'
-        with open(filename, 'wb') as f:
-            pickle.dump(im, f)
+    return scan_objects(path, IMAGE_FORMATS, recursive)
 
 
 class SubDir:
@@ -81,18 +50,27 @@ class SubDir:
         self.root = Path(root)
         self.root.mkdir(parents=True, exist_ok=True)
 
-    def find_id(self, prefix, find_type='max', separator='_'):
+    def find_id(
+        self,
+        prefix: str,
+        find_type: str = 'max',
+        separator: str = '_'
+    ) -> Optional[int]:
         """
         Finds the maximum or minimum numeric ID from directories with a given prefix.
+
+        This method searches for directories with names that start with the given prefix and contain
+        a numeric suffix. It returns the maximum or minimum value of those numeric suffixes.
 
         Args:
             prefix (str): The prefix to match for directory names.
             find_type (str, optional): The type of ID to find. Defaults to 'max'.
-                Possible values are 'max' and 'min'.
-            separator (str, optional): The separator used in directory names. Defaults to '_'.
+                Possible values are 'max' and 'min'. (str)
+            separator (str, optional): The separator used in directory names. Defaults to '_'. (str)
 
         Returns:
-            int or None: The maximum or minimum numeric ID found, or None if no matching directories are found.
+            int: The maximum or minimum numeric ID found, or None if no matching directories are found.
+                (Union[int, None])
         """
         ids = []
         for p in self.root.iterdir():
@@ -104,11 +82,18 @@ class SubDir:
             return None
         return max(ids) if find_type == 'max' else min(ids)
 
-    def next(self, prefix, separator='_', makedir=False, start_suffix=1, step=1):
+    def next(
+        self,
+        prefix: str,
+        separator: str = '_',
+        makedir: bool = False,
+        start_suffix: int = 1,
+        step: int = 1
+    ) -> str:
         """
         Generate the next available name with a numeric suffix in a sequence.
 
-        Parameters:
+        Args:
             prefix (str): The prefix of the name.
             separator (str): The separator between the prefix and the numeric suffix.
             makedir (bool): Flag to create the directory if it does not exist.
@@ -120,13 +105,6 @@ class SubDir:
 
         Raises:
             ValueError: If any of the parameters are of incorrect type or value.
-
-        Examples:
-            >>> sub_dir = SubDir('data')
-            >>> sub_dir.next('model')
-            'data/model_1'
-            >>> sub_dir.next('model', start_suffix=1)
-            'data/model_2'
         """
         max_suffix = self.find_id(prefix)
         if max_suffix is None:
@@ -145,7 +123,7 @@ class SubDir:
             suffix += step
             padding = len(str(suffix))
 
-    def current(self, prefix):
+    def current(self, prefix: str) -> Optional[str]:
         """
         Finds the current directory with the highest suffix for a given prefix.
 
@@ -157,15 +135,6 @@ class SubDir:
 
         Returns:
             str: The full path to the directory with the highest suffix for the given prefix, or None if no matching directories are found.
-
-        Examples:
-            >>> sub_dir = SubDir('data')
-            >>> sub_dir.current('model')
-            'data/model_3'
-            >>> sub_dir.current('data')
-            'data/data_1'
-            >>> sub_dir.current('image')
-            None
         """
         max_suffix = self.find_id(prefix)
         if max_suffix is None:
@@ -173,25 +142,32 @@ class SubDir:
         return str(self.root / f'{prefix}_{max_suffix}')
 
 
-@run_once
-def makedirs(root: str, dirs: set[str] = (), exist_ok=True):
+def makedirs(
+    root: str,
+    dirs: Optional[List[str]] = None,
+    skip_exist: bool = True,
+) -> List[str]:
     """
-    Create directories within a root directory.
-
-    This function creates directories within a specified root directory.
-    It can create multiple directories at once and can skip existing directories.
+    Create directories within a root directory and return the list of created directories.
+    This function creates directories within a specified root directory and returns the
+    list of directories that were successfully created. It can create multiple directories
+    at once and can skip existing directories.
 
     Args:
         root (str): The root directory to create the subdirectories in.
-        dirs (set): A list of directory names to create.
-        exist_ok (bool, optional): Flag to skip existing directories. Defaults to True.
+        dirs (Optional[List[str]]): A list of directory names to create. Defaults to None.
+        skip_exist (bool): Flag to skip existing directories. Defaults to True.
 
     Returns:
-        None
+        list: The list of directories that were successfully created.
     """
+    created_dirs = []
     if not dirs:
-        os.makedirs(root, exist_ok=exist_ok)
-        return
-
+        os.makedirs(root, exist_ok=skip_exist)
+        created_dirs.append(root)
+        return created_dirs
     for d in dirs:
-        os.makedirs(os.path.join(root, d), exist_ok=exist_ok)
+        dir_path = os.path.join(root, d)
+        os.makedirs(dir_path, exist_ok=skip_exist)
+        created_dirs.append(dir_path)
+    return created_dirs
